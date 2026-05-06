@@ -1,6 +1,6 @@
 # sk_nightvision
 
-A multi-style, multi-framework night vision gear script. Features three vision modes — Night Vision, Thermal, and Flashlight — along with StateBag-based flashlight synchronization to nearby players.
+A multi-style, multi-framework night vision gear script for FiveM. Features three vision modes — Night Vision, Thermal, and Flashlight — along with StateBag-based flashlight synchronization to nearby players.
 
 ---
 
