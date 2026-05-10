@@ -233,5 +233,5 @@ PermittedJobs = {
 
 ## 📜 依存関係
 
-- **[xsound](https://github.com/X-Scripts/xsound)**: 3D空間音声に使用（`Config.UseXSound = false` で無効化可）
+- **[xsound](https://github.com/Xogy/xsound)**: 3D空間音声に使用（`Config.UseXSound = false` で無効化可）
 - 各種インベントリシステム（ox_inventory / qb-inventory / ESX inventory）のいずれか

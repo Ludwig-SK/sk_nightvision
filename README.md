@@ -233,5 +233,5 @@ PermittedJobs = {
 
 ## 📜 Dependencies
 
-- **[xsound](https://github.com/X-Scripts/xsound)**: Used for 3D positional audio. Can be disabled with `Config.UseXSound = false`.
+- **[xsound](https://github.com/Xogy/xsound)**: Used for 3D positional audio. Can be disabled with `Config.UseXSound = false`.
 - One of the following inventory systems: ox_inventory / qb-inventory / ESX inventory
