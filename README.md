@@ -1,6 +1,6 @@
 # sk_nightvision
 
-A multi-style, multi-framework night vision gear script for FiveM. Features three vision modes — Night Vision, Thermal, and Flashlight — along with StateBag-based flashlight synchronization to nearby players.
+A multi-style, multi-framework night vision gear script. Features three vision modes — Night Vision, Thermal, and Flashlight — along with StateBag-based flashlight synchronization to nearby players.
 
 ---
 
@@ -11,6 +11,7 @@ A multi-style, multi-framework night vision gear script for FiveM. Features thre
 - **Visor toggle**: Styles with `EnableVisor = true` flip the visor up/down with an animation. Styles with `EnableVisor = false` toggle on/off instantly when the item is used.
 - **Automatic conflicting item restore**: Props and components that conflict with the gear (hats, glasses, etc.) are saved and cleared on equip, then fully restored on unequip. Restoring works correctly even after switching between styles.
 - **Flashlight synchronization**: Uses StateBag to render the flashlight on nearby players' clients. The local player's own light is also rendered.
+- **Standalone Scope Vision**: When `Config.RequireScopeForVision` is enabled, vision effects (NVG/Thermal) can be used while aiming compatible weapons even without nightvision items equipped.
 - **Per-style animation and sound settings**: Animation and sound behavior — including which files to play — can be configured individually per style. Any omitted keys fall back to the global settings.
 - **Job restrictions**: Restrict each style to specific jobs and grades.
 - **Multi-framework support**: Automatically detects QB-Core, QBX, ESX, ox_inventory, and standalone.
@@ -134,7 +135,8 @@ This script uses `xsound` to play 3D positional audio to nearby players. The def
 | `Config.RestrictByJob` | Enable or disable job-based restrictions |
 | `Config.AutoUnequipInVehicle` | Automatically unequip gear when entering a vehicle |
 | `Config.ForceFirstPerson` | Force first-person camera while NVG or Thermal is active |
-| `Config.RequireScopeForVision` | Only activate vision effects while aiming through a sniper scope |
+| `Config.RequireScopeForVision` | If `true`, enables vision effects while aiming compatible weapons (independent of equipment). Scoped vision does not show the vignette overlay. |
+| `Config.CompatibleScopeWeapons` | List of weapon hashes that support standalone scoped vision. |
 
 ### `Config.Items`
 
@@ -233,5 +235,5 @@ PermittedJobs = {
 
 ## 📜 Dependencies
 
-- **[xsound](https://github.com/Xogy/xsound)**: Used for 3D positional audio. Can be disabled with `Config.UseXSound = false`.
+- **[xsound](https://github.com/X-Scripts/xsound)**: Used for 3D positional audio. Can be disabled with `Config.UseXSound = false`.
 - One of the following inventory systems: ox_inventory / qb-inventory / ESX inventory

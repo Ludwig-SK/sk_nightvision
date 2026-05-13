@@ -1,5 +1,6 @@
 local framework = nil
 local ESX = nil
+local QBCore = nil
 local playerData = {}
 local jobStateBagHandler = nil
 local visionModeIndex = 0 -- 0: OFF, 1: NVG, 2: Thermal, 3: Light
@@ -38,8 +39,8 @@ end
 -- Displays a notification using the appropriate framework method.
 local function notify(message, type)
     if not Config.EnableNotifications then return end
-    if framework == "qb" then
-        exports['qb-core']:GetCoreObject().Functions.Notify(message, type)
+    if framework == "qb" and QBCore then
+        QBCore.Functions.Notify(message, type)
     elseif framework == "qbx" then
         exports.qbx_core:Notify(message, type)
     elseif framework == "esx" and ESX then
@@ -118,14 +119,15 @@ end
 -- Applies the vision effect for the specified mode.
 -- mode: 0=OFF, 1=NVG, 2=Thermal, 3=Flashlight
 -- silent: if true, suppresses the notification
-local function applyVisionEffect(mode, silent)
+-- skipVignette: if true, suppresses the BINOCULARS scaleform overlay
+local function applyVisionEffect(mode, silent, skipVignette)
     clearVisionEffects()
 
     if mode == 1 then
         SetNightvision(true)
         SetTimecycleModifier("NightVision")
         SetTimecycleModifierStrength(1.0)
-        if Config.UI.EnableVignette then
+        if Config.UI.EnableVignette and not skipVignette then
             scaleformHandle = loadScaleform("BINOCULARS")
         end
         if not silent then notify(L('nvg_on'), 'success') end
@@ -139,7 +141,7 @@ local function applyVisionEffect(mode, silent)
         SeethroughSetFadeStartDistance(Config.Thermal.FadeDistance)
         SetTimecycleModifier("ThermalVision")
         SetTimecycleModifierStrength(1.0)
-        if Config.UI.EnableVignette then
+        if Config.UI.EnableVignette and not skipVignette then
             scaleformHandle = loadScaleform("BINOCULARS")
         end
         if not silent then notify(L('thermal_on'), 'success') end
@@ -335,8 +337,8 @@ local function toggleVisionState(isDown)
     if not isDown then
         applyVisionEffect(0)
         LocalPlayer.state:set("helmetLight", false, true)
-    elseif not Config.RequireScopeForVision then
-        applyVisionEffect(visionModeIndex, true)
+    else
+        applyVisionEffect(visionModeIndex, true, false)
     end
 end
 
@@ -394,8 +396,9 @@ local function toggleEquipment(style, forceOff)
 
                     local requestedStyle = style or "helmet"
                     if requestedStyle ~= activeStyle and Config.Styles[requestedStyle] then
-                        -- When switching to a different style, carry over savedConflicts and
-                        -- only save slots not yet recorded before equipping the new style.
+                        -- Restore previous conflicts before switching to a new style
+                        restoreConflicts(ped)
+                        
                         Wait(200)
                         activeStyle = requestedStyle
                         local newStyleData = Config.Styles[activeStyle]
@@ -412,7 +415,7 @@ local function toggleEquipment(style, forceOff)
                         end
 
                         isEquipped = true
-                        isGogglesDown = not (Config.Styles[activeStyle] and Config.Styles[activeStyle].EnableVisor ~= false)
+                        isGogglesDown = (newStyleData.EnableVisor == false)
                         visionModeIndex = 0
                         syncPropModel(isGogglesDown)
                         notify(L('equipped'), "success")
@@ -439,7 +442,7 @@ local function toggleEquipment(style, forceOff)
                 end
 
                 isEquipped = true
-                isGogglesDown = not (styleData.EnableVisor ~= false)
+                isGogglesDown = (styleData.EnableVisor == false)
                 visionModeIndex = 0
                 syncPropModel(isGogglesDown)
                 notify(L('equipped'), "success")
@@ -456,6 +459,8 @@ end
 -- bypassPermission: if true, skips the job permission check
 local function flipGoggles(forceState, silentNotify, bypassPermission)
     if isAnimating then return end
+
+    if not isEquipped then return end -- No visor to flip if not equipped
 
     if not hasVisor() then return end
 
@@ -519,8 +524,24 @@ end
 -- Cycles: OFF → NVG → Thermal → Light → OFF
 local function cycleVision()
     if isAnimating then return end
+
+    local ped = PlayerPedId()
+    local _, hash = GetCurrentPedWeapon(ped, true)
+    local isCompatibleWeapon = false
+    for _, w in ipairs(Config.CompatibleScopeWeapons) do if hash == w then isCompatibleWeapon = true; break end end
+
+    -- Specialized cycle for scoping when RequireScopeForVision is enabled.
+    -- This allows toggling vision without needing to equip any item.
+    if Config.RequireScopeForVision and isCompatibleWeapon and IsControlPressed(0, 25) then
+        -- Cycle: OFF (0) -> NVG (1) -> Thermal (2) -> OFF (0)
+        visionModeIndex = (visionModeIndex + 1) % 3
+        applyVisionEffect(visionModeIndex, false, true) -- skipVignette = true
+        return
+    end
+
+    if not isEquipped then return end -- If not equipped and not special scope case, do nothing
+
     if hasVisor() and not isGogglesDown then return end
-    if Config.RequireScopeForVision and not isScoping then return end
     if not canUseGoggles() then
         notify(L('no_permission'), 'error')
         return
@@ -536,7 +557,8 @@ local function cycleVision()
     repeat
         nextIndex = (nextIndex + 1) % (maxModes + 1)
         iterations = iterations + 1
-        if iterations > maxModes + 1 then nextIndex = 0; break end
+        -- Safeguard: if we've checked all modes (plus OFF) and found nothing enabled, break at OFF.
+        if iterations > 4 then nextIndex = 0; break end 
         if nextIndex == 0 then break end
         if nextIndex == 1 and enableModes.NVG ~= false then break end
         if nextIndex == 2 and enableModes.Thermal ~= false then break end
@@ -560,17 +582,13 @@ local function cycleVision()
         end
     end
 
-    if not Config.RequireScopeForVision or isScoping then
-        applyVisionEffect(visionModeIndex)
-    end
+    applyVisionEffect(visionModeIndex, false, false)
 
     local myServerId = GetPlayerServerId(PlayerId())
     if visionModeIndex == 3 then
-        if not Config.RequireScopeForVision or isScoping then
-            LocalPlayer.state:set("helmetLight", style.Flashlight, true)
-            -- StateBag changes are not received by the local player via AddStateBagChangeHandler, so register directly into activeLights.
-            activeLights[myServerId] = { plyId = PlayerId(), data = style.Flashlight }
-        end
+        LocalPlayer.state:set("helmetLight", style.Flashlight, true)
+        -- StateBag changes are not received by the local player via AddStateBagChangeHandler, so register directly into activeLights.
+        activeLights[myServerId] = { plyId = PlayerId(), data = style.Flashlight }
     else
         LocalPlayer.state:set("helmetLight", false, true)
         activeLights[myServerId] = nil
@@ -581,7 +599,7 @@ end
 Citizen.CreateThread(function()
     while true do
         local sleep = 500
-        if isGogglesDown and scaleformHandle then
+        if isGogglesDown and isEquipped and scaleformHandle then
             sleep = 0
             DrawScaleformMovieFullscreen(scaleformHandle, 255, 255, 255, 255, 0)
         end
@@ -663,15 +681,29 @@ end)
 
 -- Keybind command registration.
 RegisterCommand("toggle_nvg", function()
-    local styleData = Config.Styles[activeStyle]
-    if isEquipped and styleData and styleData.EnableCommands then
-        flipGoggles()
+    if isEquipped then
+        local styleData = Config.Styles[activeStyle]
+        if styleData and styleData.EnableCommands then
+            flipGoggles()
+        end
     end
 end)
 RegisterCommand("cycle_nvg", function()
-    local styleData = Config.Styles[activeStyle]
-    if isEquipped and styleData and styleData.EnableCommands then
+    local ped = PlayerPedId()
+    local _, hash = GetCurrentPedWeapon(ped, true)
+    local isCompatibleWeapon = false
+    for _, w in ipairs(Config.CompatibleScopeWeapons) do if hash == w then isCompatibleWeapon = true; break end end
+
+    if Config.RequireScopeForVision and isCompatibleWeapon and IsControlPressed(0, 25) then
         cycleVision()
+        return
+    end
+
+    if isEquipped then
+        local styleData = Config.Styles[activeStyle]
+        if styleData and styleData.EnableCommands then
+            cycleVision()
+        end
     end
 end)
 
@@ -756,20 +788,28 @@ Citizen.CreateThread(function()
         end
 
         -- Scope state monitoring when RequireScopeForVision is enabled.
-        if Config.RequireScopeForVision and isGogglesDown and isEquipped then
-            sleep = 0
+        if Config.RequireScopeForVision then
             local _, hash = GetCurrentPedWeapon(ped, true)
             local isSniper = false
             for _, w in ipairs(Config.CompatibleScopeWeapons) do if hash == w then isSniper = true; break end end
             local scoping = isSniper and IsControlPressed(0, 25)
 
-            if scoping and not isScoping then
-                isScoping = true
-                applyVisionEffect(visionModeIndex, true)
+            if scoping then
+                sleep = 0
+                if not isScoping then
+                    isScoping = true
+                    -- Start scoping: apply current visionModeIndex if it's already set (e.g., cycled while zooming)
+                    -- For scope vision, we skip the vignette.
+                    applyVisionEffect(visionModeIndex, true, true)
+                end
             elseif not scoping and isScoping then
                 isScoping = false
+                -- If we're not equipped, clear vision effects when zooming out.
+                -- If we ARE equipped, and it's RequireScopeForVision=true, the equipment vision 
+                -- is also tied to scoping (as per the requested logic change).
                 applyVisionEffect(0, true)
                 LocalPlayer.state:set("helmetLight", false, true)
+                visionModeIndex = 0 -- Reset mode on zoom out for scope-based
             end
         end
 

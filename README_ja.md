@@ -1,6 +1,6 @@
 # sk_nightvision
 
-マルチスタイル・マルチフレームワーク対応のFiveM用暗視装備スクリプトです。ナイトビジョン・サーマル・フラッシュライトの3モードと、StateBagによる周囲プレイヤーへのライト同期を備えます。
+マルチスタイル・マルチフレームワーク対応の暗視装備スクリプトです。ナイトビジョン・サーマル・フラッシュライトの3モードと、StateBagによる周囲プレイヤーへのライト同期を備えます。
 
 ---
 
@@ -11,6 +11,7 @@
 - **バイザー上げ下ろし**: `EnableVisor = true` のスタイルはバイザーの跳ね上げアニメーション付きでON/OFFを切り替えられます。`EnableVisor = false` のスタイルはアイテム使用で即時ON/OFFします。
 - **干渉アイテムの自動復元**: 装備時に干渉するプロップ・コンポーネント（帽子・メガネ等）を自動で退避し、取り外し時に元通り復元します。スタイルを切り替えた場合も最初に退避した状態まで正しく復元されます。
 - **フラッシュライト同期**: StateBagを利用して周囲プレイヤーのクライアントでもライトを描画します。自分自身のライトも同様に描画されます。
+- **独立したスコープ暗視機能**: `Config.RequireScopeForVision` を有効にすると、暗視アイテムを装備していなくても、対応する武器でエイム中であれば暗視・サーマル効果を使用できます。
 - **スタイルごとの細かな設定**: アニメーション・サウンドの有無とファイルを装備スタイルごとに個別指定できます。未指定のキーはグローバル設定にフォールバックします。
 - **ジョブ制限**: スタイルごとに使用を許可するジョブとグレードを設定できます。
 - **マルチフレームワーク対応**: QB-Core・QBX・ESX・ox_inventory・standaloneを自動検出します。
@@ -134,7 +135,8 @@ sk_nightvision/
 | `Config.RestrictByJob` | ジョブ制限の有効/無効 |
 | `Config.AutoUnequipInVehicle` | 乗車時の自動解除の有効/無効 |
 | `Config.ForceFirstPerson` | NVG・サーマル使用中に一人称カメラを強制するか |
-| `Config.RequireScopeForVision` | スナイパースコープ使用中のみビジョンを有効にするか |
+| `Config.RequireScopeForVision` | `true` の場合、対応武器でのエイム中にビジョン効果を有効化します（アイテム不要）。スコープ使用時はビネットが表示されません。 |
+| `Config.CompatibleScopeWeapons` | 独立したスコープ暗視機能をサポートする武器ハッシュのリスト |
 
 ### `Config.Items`
 
@@ -233,5 +235,5 @@ PermittedJobs = {
 
 ## 📜 依存関係
 
-- **[xsound](https://github.com/Xogy/xsound)**: 3D空間音声に使用（`Config.UseXSound = false` で無効化可）
+- **[xsound](https://github.com/X-Scripts/xsound)**: 3D空間音声に使用（`Config.UseXSound = false` で無効化可）
 - 各種インベントリシステム（ox_inventory / qb-inventory / ESX inventory）のいずれか
