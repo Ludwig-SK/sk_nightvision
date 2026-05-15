@@ -3,6 +3,7 @@
 
 # export-ignore
 .gitignore      export-ignore
+.gitattributes  export-ignore
 _config.yml     export-ignore
 README_ja.md    export-ignore
 SECURITY.md     export-ignore
