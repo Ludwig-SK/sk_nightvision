@@ -1,2 +1,10 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# export-ignore
+.gitignore      export-ignore
+_config.yml     export-ignore
+README_ja.md    export-ignore
+SECURITY.md     export-ignore
+SECURITY_ja.md  export-ignore
+google8fb9ddd4a0947fa1.html export-ignore
