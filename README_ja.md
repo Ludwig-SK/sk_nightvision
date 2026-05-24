@@ -8,10 +8,10 @@
 
 - **マルチスタイル対応**: ヘルメット・ゴーグル・フルフェイスマスクなど、複数の装備タイプを `config.lua` で自由に定義できます。
 - **3つのビジョンモード**: ナイトビジョン・サーマルビジョン・フラッシュライト（スタイルごとに有効/無効を設定可）。
+- **2種類のNVG光電管タイプ**: スタイルごとに**緑色光電管**（標準の `SetNightvision` 使用）または**白色光電管**（タイムサイクル＋環境点光源使用）を選択できます。サーマルの各パラメータもスタイルごとに細かく設定可能です。
 - **バイザー上げ下ろし**: `EnableVisor = true` のスタイルはバイザーの跳ね上げアニメーション付きでON/OFFを切り替えられます。`EnableVisor = false` のスタイルはアイテム使用で即時ON/OFFします。
 - **干渉アイテムの自動復元**: 装備時に干渉するプロップ・コンポーネント（帽子・メガネ等）を自動で退避し、取り外し時に元通り復元します。スタイルを切り替えた場合も最初に退避した状態まで正しく復元されます。
 - **フラッシュライト同期**: StateBagを利用して周囲プレイヤーのクライアントでもライトを描画します。自分自身のライトも同様に描画されます。
-- **独立したスコープ暗視機能**: `Config.RequireScopeForVision` を有効にすると、暗視アイテムを装備していなくても、対応する武器でエイム中であれば暗視・サーマル効果を使用できます。
 - **スタイルごとの細かな設定**: アニメーション・サウンドの有無とファイルを装備スタイルごとに個別指定できます。未指定のキーはグローバル設定にフォールバックします。
 - **ジョブ制限**: スタイルごとに使用を許可するジョブとグレードを設定できます。
 - **マルチフレームワーク対応**: QB-Core・QBX・ESX・ox_inventory・standaloneを自動検出します。
@@ -133,10 +133,8 @@ sk_nightvision/
 | `Config.EnableSounds` | サウンド機能の有効/無効 |
 | `Config.UseXSound` | xsoundによる3D空間音声の有効/無効 |
 | `Config.RestrictByJob` | ジョブ制限の有効/無効 |
-| `Config.AutoUnequipInVehicle` | 乗車時の自動解除の有効/無効 |
+| `Config.AutoUnequipInVehicle` | 乗車時の自動解除の有効/無効（バイク・軍用車両は対象外） |
 | `Config.ForceFirstPerson` | NVG・サーマル使用中に一人称カメラを強制するか |
-| `Config.RequireScopeForVision` | `true` の場合、対応武器でのエイム中にビジョン効果を有効化します（アイテム不要）。スコープ使用時はビネットが表示されません。 |
-| `Config.CompatibleScopeWeapons` | 独立したスコープ暗視機能をサポートする武器ハッシュのリスト |
 
 ### `Config.Items`
 
@@ -144,8 +142,8 @@ sk_nightvision/
 
 ```lua
 Config.Items = {
-    ["nightvision_helmet"]  = "helmet",
-    ["nightvision_goggles"] = "goggles",
+    ["nightvision_helmet"]   = "helmet",
+    ["nightvision_goggles"]  = "goggles",
     ["nightvision_fullface"] = "fullface",
 }
 ```
@@ -156,6 +154,7 @@ Config.Items = {
 
 | キー | 説明 |
 | :--- | :--- |
+| `NVGType` | NVGの光電管タイプ: `"green"`（デフォルト）または `"white"`。詳細は[NVG光電管タイプ](#-nvg光電管タイプ)を参照。 |
 | `SlotType` | `"prop"` または `"component"` |
 | `Slot` | プロップ/コンポーネントのスロット番号 |
 | `ConflictingProps` | 装備時に退避するプロップのスロット番号リスト |
@@ -165,9 +164,9 @@ Config.Items = {
 | `EnableCommands` | キーバインドによる操作を許可するか |
 | `EnableItemUse` | アイテム使用による装着を許可するか |
 | `EnableModes` | `NVG` / `Thermal` / `Light` それぞれの有効/無効 |
-| `PermittedJobs` | 使用を許可するジョブ名とグレード（`nil` の場合は全員許可） |
+| `PermittedJobs` | 使用を許可するジョブ名とグレード（`nil` または省略で全員許可） |
 | `Male` / `Female` | プロップ/コンポーネントのモデルID・テクスチャID。`DownModel`/`DownTexture` がバイザーを降ろした状態、`UpModel`/`UpTexture` が上げた状態 |
-| `Flashlight` | フラッシュライトの位置・色・距離・明るさ等の設定 |
+| `Flashlight` | フラッシュライトの設定: `offset`・`color`・`distance`・`brightness`・`hardness`・`radius`・`falloff` |
 
 #### `AnimationSettings`（スタイル個別、省略可）
 
@@ -197,6 +196,35 @@ Config.Items = {
 | `Volume` | 音量（0.0〜1.0） |
 | `Distance` | 3D音声の聞こえる距離（メートル） |
 
+#### `ThermalSettings`（スタイル個別、省略可）
+
+省略したキーはグローバルの `Config.Thermal` の値が使われます。
+
+| キー | 説明 |
+| :--- | :--- |
+| `MaxNoise` | ノイズ/グレインの最大量（0.0〜1.0） |
+| `MinNoise` | ノイズ/グレインの最小量 |
+| `Intensity` | 熱源ハイライトの明るさ |
+| `Heatscale` | 熱源の検出感度。低い値は強い熱源のみ強調し、高い値は壁や地面も光らせる |
+| `FadeStartDistance` | 映像がフェードアウトし始める距離（メートル） |
+| `FadeEndDistance` | 映像が完全にフェードアウトする距離（メートル） |
+| `ColorNear` | 近距離のジオメトリへの色乗算（`{r, g, b}`、各0.0〜1.0）。`{0,0,0}` で色乗算なし |
+| `ColorFar` | 遠距離のジオメトリへの色乗算（`{r, g, b}`、各0.0〜1.0） |
+| `TimecycleModifier` | サーマル使用中に適用するタイムサイクル |
+| `TimecycleStrength` | タイムサイクルの適用強度（0.0〜1.0） |
+
+#### `WhiteNVGSettings`（スタイル個別、省略可・`NVGType = "white"` のみ有効）
+
+省略したキーはグローバルの `Config.WhiteNVG` の値が使われます。
+
+| キー | 説明 |
+| :--- | :--- |
+| `TimecycleModifier` | 白色NVG使用中に適用するタイムサイクル |
+| `TimecycleStrength` | タイムサイクルの適用強度 |
+| `AmbientLight.radius` | 環境点光源の有効半径（メートル） |
+| `AmbientLight.intensity` | 環境点光源の明るさ倍率 |
+| `AmbientLight.color` | 環境点光源の色（`{r, g, b}`、各0〜255） |
+
 ### `Config.ControlKeys`
 
 | キー | 説明 |
@@ -205,6 +233,32 @@ Config.Items = {
 | `CycleVisionModes` | モード切替のキーバインド（デフォルト: `"J"`） |
 | `PadToggle` | コントローラー用のバイザー操作ボタン（不要な場合は `nil`） |
 | `PadCycle` | コントローラー用のモード切替ボタン（不要な場合は `nil`） |
+
+---
+
+## 💡 NVG光電管タイプ
+
+各スタイルは `NVGType` フィールドでNVGの描画方式を個別に指定できます。
+
+### `"green"`（デフォルト）
+`SetNightvision` を使用する、従来の緑色光電管スタイルです。`NVGType` を省略した場合はこのタイプになります。
+
+### `"white"`
+タイムサイクル（デフォルト: `MichaelColorCodeBright`）とカメラ位置への影なし環境点光源を組み合わせた、白色光電管スタイルです。グローバル設定は `Config.WhiteNVG`、スタイル個別の上書きは `WhiteNVGSettings` で行います。
+
+```lua
+-- 白色光電管スタイルの設定例
+NVGType = "white",
+WhiteNVGSettings = {              -- 省略可。省略したキーは Config.WhiteNVG にフォールバック
+    TimecycleModifier = "MichaelColorCodeBright",
+    TimecycleStrength = 1.0,
+    AmbientLight = {
+        radius    = 50.0,
+        intensity = 20.0,
+        color     = {r = 255, g = 255, b = 255},
+    },
+},
+```
 
 ---
 

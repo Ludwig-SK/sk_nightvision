@@ -25,6 +25,9 @@ Config.Items = {
 -- Styles can be freely added or removed. Link them to Config.Items using matching key names.
 Config.Styles = {
     ["helmet"] = {
+        -- NVG phosphor type: "green" (default, uses SetNightvision) or "white" (uses timecycle + ambient light).
+        -- Omitting this field defaults to "green".
+        -- NVGType = "green",
         -- Whether to use a prop (hat slot, etc.) or a component (mask slot, etc.).
         -- "prop": uses SetPedPropIndex / ClearPedProp
         -- "component": uses SetPedComponentVariation
@@ -123,9 +126,28 @@ Config.Styles = {
             Volume   = 0.5,   -- Volume (0.0-1.0)
             Distance = 10.0,  -- Distance at which 3D audio is audible (meters)
         },
+
+        -- Per-style thermal settings.
+        -- Any omitted key falls back to the corresponding value in Config.Thermal.
+        -- Omitting the entire table uses the global settings as-is.
+        -- helmet: high-performance thermal. Very low noise, long range, sensitive heat detection.
+        -- ColorNear/ColorFar are kept at zero to avoid tinting background geometry.
+        ThermalSettings = {
+            MaxNoise          = 0.02,
+            MinNoise          = 0.0,
+            Intensity         = 1.5,
+            Heatscale         = 0.2,
+            FadeStartDistance = 200.0,
+            FadeEndDistance   = 350.0,
+            ColorNear         = {r = 0.0, g = 0.0, b = 0.0},
+            ColorFar          = {r = 0.0, g = 0.0, b = 0.0},
+            TimecycleModifier = "ThermalVision",
+            TimecycleStrength = 1.0,
+        },
     },
 
     ["goggles"] = {
+        -- NVGType = "green",  -- default
         SlotType = "prop",
         Slot = 0,
         ConflictingProps = {0},
@@ -179,9 +201,26 @@ Config.Styles = {
             Volume   = 0.5,
             Distance = 10.0,
         },
+
+        -- goggles: slightly reduced thermal performance. More noise, shorter range, dimmer highlight.
+        -- ColorNear/ColorFar are kept at zero to avoid tinting background geometry.
+        ThermalSettings = {
+            MaxNoise          = 0.2,
+            MinNoise          = 0.05,
+            Intensity         = 0.7,
+            Heatscale         = 0.4,
+            FadeStartDistance = 60.0,
+            FadeEndDistance   = 120.0,
+            ColorNear         = {r = 0.0, g = 0.0, b = 0.0},
+            ColorFar          = {r = 0.0, g = 0.0, b = 0.0},
+            TimecycleModifier = "ThermalVision",
+            TimecycleStrength = 1.0,
+        },
     },
 
     ["fullface"] = {
+        -- White phosphor NVG: uses timecycle + ambient point light instead of SetNightvision.
+        NVGType = "white",
         -- Component type (uses the mask slot).
         SlotType = "component",
         Slot = 1,  -- Mask slot
@@ -237,6 +276,28 @@ Config.Styles = {
             Volume   = 0.5,
             Distance = 10.0,
         },
+
+        -- Per-style white phosphor NVG settings.
+        -- Any omitted key falls back to the corresponding value in Config.WhiteNVG.
+        -- Omitting the entire table uses the global settings as-is.
+        -- WhiteNVGSettings = {
+        --     TimecycleModifier = "MichaelColorCodeBright",
+        --     TimecycleStrength = 1.0,
+        --     AmbientLight = {
+        --         radius    = 50.0,
+        --         intensity = 20.0,
+        --         color     = {r = 255, g = 255, b = 255},
+        --     },
+        -- },
+
+        -- fullface: near-global thermal performance.
+        -- ColorNear/ColorFar are kept at zero to avoid tinting background geometry.
+        -- Slightly reduced Heatscale compared to helmet for a calmer image.
+        ThermalSettings = {
+            Heatscale         = 0.3,
+            ColorNear         = {r = 0.0, g = 0.0, b = 0.0},
+            ColorFar          = {r = 0.0, g = 0.0, b = 0.0},
+        },
     },
 }
 
@@ -257,13 +318,46 @@ Config.XSoundSettings = {
     Distance = 10.0,  -- Distance at which 3D audio is audible (meters)
 }
 
--- Thermal vision image parameter tuning.
+-- Global thermal vision parameter tuning.
+-- Any key omitted in a style's ThermalSettings falls back to these values.
 Config.Thermal = {
-    MaxNoise     = 0.1,    -- Maximum noise amount (0.0-1.0; higher = grainier)
-    MinNoise     = 0.0,    -- Minimum noise amount
-    Intensity    = 1.0,    -- Highlight intensity
-    Heatscale    = 1.0,    -- Heat source emphasis
-    FadeDistance = 100.0,  -- Distance at which the image begins to fade out (meters)
+    -- SeethroughSetNoiseAmountMax: maximum grain/noise overlay amount (0.0-1.0; higher = grainier)
+    MaxNoise          = 0.1,
+    -- SeethroughSetNoiseAmountMin: minimum grain/noise overlay amount
+    MinNoise          = 0.0,
+    -- SeethroughSetHiLightIntensity: brightness of highlighted heat sources
+    Intensity         = 1.0,
+    -- SeethroughSetHeatscale: heat source threshold/sensitivity (index 0).
+    -- Low values highlight only strong heat sources; high values cause walls and terrain to glow.
+    Heatscale         = 0.3,
+    -- SeethroughSetFadeStartDistance: distance at which the image begins to fade (meters)
+    FadeStartDistance = 100.0,
+    -- SeethroughSetFadeEndDistance: distance at which the image is fully faded (meters)
+    FadeEndDistance   = 200.0,
+    -- SeethroughSetColorNear: color tint applied to nearby geometry (RGB, 0.0-1.0).
+    -- Set to {0,0,0} to apply no tint and rely solely on the ThermalVision timecycle.
+    ColorNear         = {r = 0.0, g = 0.0, b = 0.0},
+    -- SeethroughSetColorFar: color tint applied to distant geometry (RGB, 0.0-1.0).
+    ColorFar          = {r = 0.0, g = 0.0, b = 0.0},
+    -- TimecycleModifier applied while thermal is active
+    TimecycleModifier = "ThermalVision",
+    TimecycleStrength = 1.0,
+}
+
+-- White phosphor NVG settings (used when NVGType = "white").
+-- TimecycleModifier: the timecycle applied instead of SetNightvision.
+-- AmbientLight: a point light placed at the camera to illuminate the scene.
+--   radius    : effective radius of the light (meters)
+--   intensity : brightness multiplier
+--   color     : RGB color of the light (should be white/near-white for white phosphor look)
+Config.WhiteNVG = {
+    TimecycleModifier = "MichaelColorCodeBright",
+    TimecycleStrength = 1.0,
+    AmbientLight = {
+        radius    = 50.0,
+        intensity = 20.0,
+        color     = {r = 255, g = 255, b = 255},
+    },
 }
 
 -- Settings for the overlay (BINOCULARS scaleform) displayed while a vision mode is active.
@@ -282,21 +376,8 @@ Config.AutoUnequipInVehicle = true
 -- false: all players can use any gear regardless of job (PermittedJobs is ignored).
 Config.RestrictByJob = true
 
--- true: vision effects are only active while aiming through a sniper scope.
--- Useful for scope integration. Set to false for normal operation.
-Config.RequireScopeForVision = false
-
 -- true: forces first-person camera (view mode 4) while NVG or Thermal is active.
 Config.ForceFirstPerson = true
-
--- List of weapon hashes for which scope integration is enabled when RequireScopeForVision = true.
-Config.CompatibleScopeWeapons = {
-    `WEAPON_SNIPERRIFLE`,
-    `WEAPON_HEAVYSNIPER`,
-    `WEAPON_HEAVYSNIPER_MK2`,
-    `WEAPON_MARKSMANRIFLE`,
-    `WEAPON_MARKSMANRIFLE_MK2`,
-}
 
 -- Keybind configuration.
 Config.ControlKeys = {

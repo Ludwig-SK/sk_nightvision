@@ -6,7 +6,6 @@ local jobStateBagHandler = nil
 local visionModeIndex = 0 -- 0: OFF, 1: NVG, 2: Thermal, 3: Light
 local activeStyle = "helmet"
 local isGogglesDown = false
-local isScoping = false
 local isEquipped = false
 local isAnimating = false
 local equippedPropId = -1
@@ -62,6 +61,48 @@ local function getSoundSetting(style, key)
     return Config.XSoundSettings[key]
 end
 
+-- Returns a white NVG setting value for the given style.
+-- Prefers the style's own WhiteNVGSettings; falls back to Config.WhiteNVG for any missing key.
+-- For nested AmbientLight keys, falls back key-by-key.
+local function getWhiteNVGSetting(style, key, subkey)
+    if subkey then
+        local styleVal = style and style.WhiteNVGSettings and style.WhiteNVGSettings[key] and style.WhiteNVGSettings[key][subkey]
+        if styleVal ~= nil then return styleVal end
+        return Config.WhiteNVG[key] and Config.WhiteNVG[key][subkey]
+    end
+    if style and style.WhiteNVGSettings and style.WhiteNVGSettings[key] ~= nil then
+        return style.WhiteNVGSettings[key]
+    end
+    return Config.WhiteNVG[key]
+end
+
+-- Returns a thermal setting value for the given style.
+-- Prefers the style's own ThermalSettings; falls back to Config.Thermal for any missing key.
+-- For nested ColorNear/ColorFar keys, falls back key-by-key.
+local function getThermalSetting(style, key, subkey)
+    if subkey then
+        local styleVal = style and style.ThermalSettings and style.ThermalSettings[key] and style.ThermalSettings[key][subkey]
+        if styleVal ~= nil then return styleVal end
+        return Config.Thermal[key] and Config.Thermal[key][subkey]
+    end
+    if style and style.ThermalSettings and style.ThermalSettings[key] ~= nil then
+        return style.ThermalSettings[key]
+    end
+    return Config.Thermal[key]
+end
+
+-- Returns the NVG phosphor type for the current active style.
+-- "green": uses SetNightvision (default) / "white": uses timecycle + ambient point light
+local function getNVGType()
+    local styleData = Config.Styles[activeStyle]
+    local t = styleData and styleData.NVGType
+    if t == "white" then return "white" end
+    return "green"
+end
+
+-- Whether the white phosphor ambient light is currently active.
+local isWhiteNVGActive = false
+
 -- Plays a 3D positional sound via xsound, audible to the local player and nearby players.
 -- soundType: "toggle" (visor up/down) or "switch" (mode cycle)
 -- style: style data table from Config.Styles (used to look up sound settings)
@@ -110,6 +151,7 @@ local function clearVisionEffects()
     SetNightvision(false)
     SetSeethrough(false)
     SeethroughReset()
+    isWhiteNVGActive = false
     if scaleformHandle then
         SetScaleformMovieAsNoLongerNeeded(scaleformHandle)
         scaleformHandle = nil
@@ -124,23 +166,40 @@ local function applyVisionEffect(mode, silent, skipVignette)
     clearVisionEffects()
 
     if mode == 1 then
-        SetNightvision(true)
-        SetTimecycleModifier("NightVision")
-        SetTimecycleModifierStrength(1.0)
+        -- Load the vignette scaleform first (blocking) so that the vision effect and overlay
+        -- appear in the same frame, eliminating any visible lag between them.
         if Config.UI.EnableVignette and not skipVignette then
             scaleformHandle = loadScaleform("BINOCULARS")
+        end
+        local style = Config.Styles[activeStyle]
+        if getNVGType() == "white" then
+            -- White phosphor: timecycle + ambient point light drawn each frame by the white NVG thread.
+            SetTimecycleModifier(getWhiteNVGSetting(style, "TimecycleModifier"))
+            SetTimecycleModifierStrength(getWhiteNVGSetting(style, "TimecycleStrength"))
+            isWhiteNVGActive = true
+        else
+            -- Green phosphor (default): standard SetNightvision.
+            SetNightvision(true)
+            SetTimecycleModifier("NightVision")
+            SetTimecycleModifierStrength(1.0)
         end
         if not silent then notify(L('nvg_on'), 'success') end
 
     elseif mode == 2 then
+        local style    = Config.Styles[activeStyle]
+        local colorNear = getThermalSetting(style, "ColorNear") or {r = 1.0, g = 0.4, b = 0.0}
+        local colorFar  = getThermalSetting(style, "ColorFar")  or {r = 0.0, g = 0.0, b = 1.0}
         SetSeethrough(true)
-        SeethroughSetNoiseAmountMax(Config.Thermal.MaxNoise)
-        SeethroughSetNoiseAmountMin(Config.Thermal.MinNoise)
-        SeethroughSetHiLightIntensity(Config.Thermal.Intensity)
-        SeethroughSetHeatscale(0, Config.Thermal.Heatscale)
-        SeethroughSetFadeStartDistance(Config.Thermal.FadeDistance)
-        SetTimecycleModifier("ThermalVision")
-        SetTimecycleModifierStrength(1.0)
+        SeethroughSetNoiseAmountMax(getThermalSetting(style, "MaxNoise"))
+        SeethroughSetNoiseAmountMin(getThermalSetting(style, "MinNoise"))
+        SeethroughSetHiLightIntensity(getThermalSetting(style, "Intensity"))
+        SeethroughSetHeatscale(0, getThermalSetting(style, "Heatscale"))
+        SeethroughSetFadeStartDistance(getThermalSetting(style, "FadeStartDistance"))
+        SeethroughSetFadeEndDistance(getThermalSetting(style, "FadeEndDistance"))
+        SeethroughSetColorNear(colorNear.r, colorNear.g, colorNear.b)
+        SeethroughSetColorFar(colorFar.r, colorFar.g, colorFar.b)
+        SetTimecycleModifier(getThermalSetting(style, "TimecycleModifier"))
+        SetTimecycleModifierStrength(getThermalSetting(style, "TimecycleStrength"))
         if Config.UI.EnableVignette and not skipVignette then
             scaleformHandle = loadScaleform("BINOCULARS")
         end
@@ -525,21 +584,7 @@ end
 local function cycleVision()
     if isAnimating then return end
 
-    local ped = PlayerPedId()
-    local _, hash = GetCurrentPedWeapon(ped, true)
-    local isCompatibleWeapon = false
-    for _, w in ipairs(Config.CompatibleScopeWeapons) do if hash == w then isCompatibleWeapon = true; break end end
-
-    -- Specialized cycle for scoping when RequireScopeForVision is enabled.
-    -- This allows toggling vision without needing to equip any item.
-    if Config.RequireScopeForVision and isCompatibleWeapon and IsControlPressed(0, 25) then
-        -- Cycle: OFF (0) -> NVG (1) -> Thermal (2) -> OFF (0)
-        visionModeIndex = (visionModeIndex + 1) % 3
-        applyVisionEffect(visionModeIndex, false, true) -- skipVignette = true
-        return
-    end
-
-    if not isEquipped then return end -- If not equipped and not special scope case, do nothing
+    if not isEquipped then return end
 
     if hasVisor() and not isGogglesDown then return end
     if not canUseGoggles() then
@@ -602,6 +647,24 @@ Citizen.CreateThread(function()
         if isGogglesDown and isEquipped and scaleformHandle then
             sleep = 0
             DrawScaleformMovieFullscreen(scaleformHandle, 255, 255, 255, 255, 0)
+        end
+        Wait(sleep)
+    end
+end)
+
+-- Draw thread for the white phosphor NVG ambient point light.
+-- Draws a shadowless point light at the gameplay camera position each frame while white NVG is active.
+Citizen.CreateThread(function()
+    while true do
+        local sleep = 500
+        if isWhiteNVGActive and isGogglesDown and isEquipped then
+            sleep = 0
+            local style     = Config.Styles[activeStyle]
+            local color     = getWhiteNVGSetting(style, "AmbientLight", "color") or {r = 255, g = 255, b = 255}
+            local radius    = getWhiteNVGSetting(style, "AmbientLight", "radius")    or 50.0
+            local intensity = getWhiteNVGSetting(style, "AmbientLight", "intensity") or 20.0
+            local camPos    = GetGameplayCamCoord()
+            DrawLightWithRangeAndShadow(camPos.x, camPos.y, camPos.z, color.r, color.g, color.b, radius, intensity, 0.0)
         end
         Wait(sleep)
     end
@@ -689,16 +752,6 @@ RegisterCommand("toggle_nvg", function()
     end
 end)
 RegisterCommand("cycle_nvg", function()
-    local ped = PlayerPedId()
-    local _, hash = GetCurrentPedWeapon(ped, true)
-    local isCompatibleWeapon = false
-    for _, w in ipairs(Config.CompatibleScopeWeapons) do if hash == w then isCompatibleWeapon = true; break end end
-
-    if Config.RequireScopeForVision and isCompatibleWeapon and IsControlPressed(0, 25) then
-        cycleVision()
-        return
-    end
-
     if isEquipped then
         local styleData = Config.Styles[activeStyle]
         if styleData and styleData.EnableCommands then
@@ -784,32 +837,6 @@ Citizen.CreateThread(function()
                 if GetFollowPedCamViewMode() ~= 4 then
                     SetFollowPedCamViewMode(4)
                 end
-            end
-        end
-
-        -- Scope state monitoring when RequireScopeForVision is enabled.
-        if Config.RequireScopeForVision then
-            local _, hash = GetCurrentPedWeapon(ped, true)
-            local isSniper = false
-            for _, w in ipairs(Config.CompatibleScopeWeapons) do if hash == w then isSniper = true; break end end
-            local scoping = isSniper and IsControlPressed(0, 25)
-
-            if scoping then
-                sleep = 0
-                if not isScoping then
-                    isScoping = true
-                    -- Start scoping: apply current visionModeIndex if it's already set (e.g., cycled while zooming)
-                    -- For scope vision, we skip the vignette.
-                    applyVisionEffect(visionModeIndex, true, true)
-                end
-            elseif not scoping and isScoping then
-                isScoping = false
-                -- If we're not equipped, clear vision effects when zooming out.
-                -- If we ARE equipped, and it's RequireScopeForVision=true, the equipment vision 
-                -- is also tied to scoping (as per the requested logic change).
-                applyVisionEffect(0, true)
-                LocalPlayer.state:set("helmetLight", false, true)
-                visionModeIndex = 0 -- Reset mode on zoom out for scope-based
             end
         end
 

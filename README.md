@@ -8,10 +8,10 @@ A multi-style, multi-framework night vision gear script. Features three vision m
 
 - **Multi-style support**: Define any number of gear types (helmet, goggles, full-face mask, etc.) in `config.lua`.
 - **Three vision modes**: Night Vision, Thermal Vision, and Flashlight. Each mode can be enabled or disabled per style.
+- **Two NVG phosphor types**: Each style can independently use **green phosphor** (standard `SetNightvision`) or **white phosphor** (timecycle + ambient point light). Thermal parameters are also fully configurable per style.
 - **Visor toggle**: Styles with `EnableVisor = true` flip the visor up/down with an animation. Styles with `EnableVisor = false` toggle on/off instantly when the item is used.
 - **Automatic conflicting item restore**: Props and components that conflict with the gear (hats, glasses, etc.) are saved and cleared on equip, then fully restored on unequip. Restoring works correctly even after switching between styles.
 - **Flashlight synchronization**: Uses StateBag to render the flashlight on nearby players' clients. The local player's own light is also rendered.
-- **Standalone Scope Vision**: When `Config.RequireScopeForVision` is enabled, vision effects (NVG/Thermal) can be used while aiming compatible weapons even without nightvision items equipped.
 - **Per-style animation and sound settings**: Animation and sound behavior — including which files to play — can be configured individually per style. Any omitted keys fall back to the global settings.
 - **Job restrictions**: Restrict each style to specific jobs and grades.
 - **Multi-framework support**: Automatically detects QB-Core, QBX, ESX, ox_inventory, and standalone.
@@ -133,10 +133,8 @@ This script uses `xsound` to play 3D positional audio to nearby players. The def
 | `Config.EnableSounds` | Enable or disable all sounds |
 | `Config.UseXSound` | Enable or disable 3D positional audio via xsound |
 | `Config.RestrictByJob` | Enable or disable job-based restrictions |
-| `Config.AutoUnequipInVehicle` | Automatically unequip gear when entering a vehicle |
+| `Config.AutoUnequipInVehicle` | Automatically unequip gear when entering a vehicle (bikes and military vehicles are exempt) |
 | `Config.ForceFirstPerson` | Force first-person camera while NVG or Thermal is active |
-| `Config.RequireScopeForVision` | If `true`, enables vision effects while aiming compatible weapons (independent of equipment). Scoped vision does not show the vignette overlay. |
-| `Config.CompatibleScopeWeapons` | List of weapon hashes that support standalone scoped vision. |
 
 ### `Config.Items`
 
@@ -156,6 +154,7 @@ Detailed settings for each gear style. Styles can be freely added or removed.
 
 | Key | Description |
 | :--- | :--- |
+| `NVGType` | NVG phosphor type: `"green"` (default) or `"white"`. See [NVG Phosphor Types](#-nvg-phosphor-types) below. |
 | `SlotType` | `"prop"` or `"component"` |
 | `Slot` | Slot number for the prop or component |
 | `ConflictingProps` | List of prop slot numbers to save and clear on equip |
@@ -167,7 +166,7 @@ Detailed settings for each gear style. Styles can be freely added or removed.
 | `EnableModes` | Enable or disable each of `NVG`, `Thermal`, and `Light` individually |
 | `PermittedJobs` | Jobs and minimum grades allowed to use this style. Omit or set to `nil` to allow all players. |
 | `Male` / `Female` | Model and texture IDs for the prop or component. `DownModel`/`DownTexture` is the visor-down state; `UpModel`/`UpTexture` is the visor-up state. |
-| `Flashlight` | Flashlight settings: offset, color, distance, brightness, etc. |
+| `Flashlight` | Flashlight settings: `offset`, `color`, `distance`, `brightness`, `hardness`, `radius`, `falloff` |
 
 #### `AnimationSettings` (per-style, optional)
 
@@ -197,6 +196,35 @@ Any omitted keys fall back to the global `Config.XSoundSettings`.
 | `Volume` | Volume level (0.0 to 1.0) |
 | `Distance` | Distance at which 3D audio is audible (in meters) |
 
+#### `ThermalSettings` (per-style, optional)
+
+Any omitted keys fall back to the global `Config.Thermal`.
+
+| Key | Description |
+| :--- | :--- |
+| `MaxNoise` | Maximum grain/noise overlay amount (0.0–1.0) |
+| `MinNoise` | Minimum grain/noise overlay amount |
+| `Intensity` | Brightness of highlighted heat sources |
+| `Heatscale` | Heat source sensitivity. Lower values highlight only strong sources; higher values cause walls and terrain to glow. |
+| `FadeStartDistance` | Distance at which the image begins to fade (meters) |
+| `FadeEndDistance` | Distance at which the image is fully faded (meters) |
+| `ColorNear` | Color tint applied to nearby geometry (`{r, g, b}`, 0.0–1.0). Set to `{0,0,0}` to apply no tint. |
+| `ColorFar` | Color tint applied to distant geometry (`{r, g, b}`, 0.0–1.0) |
+| `TimecycleModifier` | Timecycle applied while thermal is active |
+| `TimecycleStrength` | Strength of the timecycle modifier (0.0–1.0) |
+
+#### `WhiteNVGSettings` (per-style, optional, `NVGType = "white"` only)
+
+Any omitted keys fall back to the global `Config.WhiteNVG`.
+
+| Key | Description |
+| :--- | :--- |
+| `TimecycleModifier` | Timecycle applied while white NVG is active |
+| `TimecycleStrength` | Strength of the timecycle modifier |
+| `AmbientLight.radius` | Effective radius of the ambient point light (meters) |
+| `AmbientLight.intensity` | Brightness multiplier of the ambient point light |
+| `AmbientLight.color` | Color of the ambient point light (`{r, g, b}`, 0–255) |
+
 ### `Config.ControlKeys`
 
 | Key | Description |
@@ -205,6 +233,32 @@ Any omitted keys fall back to the global `Config.XSoundSettings`.
 | `CycleVisionModes` | Keybind for cycling vision modes (default: `"J"`) |
 | `PadToggle` | Controller button for visor toggle. Set to `nil` to disable. |
 | `PadCycle` | Controller button for mode cycling. Set to `nil` to disable. |
+
+---
+
+## 💡 NVG Phosphor Types
+
+Each style can independently specify its NVG rendering method via the `NVGType` field.
+
+### `"green"` (default)
+Uses `SetNightvision`. Produces the classic green-tinted phosphor look. Omitting `NVGType` defaults to this type.
+
+### `"white"`
+Uses a timecycle modifier (`MichaelColorCodeBright` by default) combined with a shadowless ambient point light placed at the camera. Produces a bright, white phosphor-style image. Configured globally via `Config.WhiteNVG` and overridable per style via `WhiteNVGSettings`.
+
+```lua
+-- Example: white phosphor style
+NVGType = "white",
+WhiteNVGSettings = {              -- optional; falls back to Config.WhiteNVG
+    TimecycleModifier = "MichaelColorCodeBright",
+    TimecycleStrength = 1.0,
+    AmbientLight = {
+        radius    = 50.0,
+        intensity = 20.0,
+        color     = {r = 255, g = 255, b = 255},
+    },
+},
+```
 
 ---
 
